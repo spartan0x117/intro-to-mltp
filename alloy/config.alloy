@@ -4,3 +4,32 @@ livedebugging {
 
 // This is the config that Alloy will use. We will be filling this out
 // in the hands-on sections and exercises
+
+// Section 1
+
+logging {
+    format = "logfmt"
+    level  = "debug"
+
+    write_to = [loki.relabel.alloy_logs.receiver]
+}
+
+loki.relabel "alloy_logs" {
+    forward_to = [loki.write.mythical.receiver]
+
+    rule {
+        target_label = "group"
+        replacement  = "infrastructure"
+    }
+
+    rule {
+        target_label = "service"
+        replacement  = "alloy" 
+    }
+}
+
+loki.write "mythical" {
+    endpoint {
+        url = "http://loki:3100/loki/api/v1/push"
+    }
+}
