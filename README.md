@@ -545,7 +545,7 @@ loki.process "mythical" {
   - Forward the processed logs to Loki
 #### Verification
 
-Navigate to Dashboards > `Section 6 Verification` and you should see a dashboard with the rate of logs coming from the mythical apps as well as panels showing the logs themselves for the server and requester
+Navigate to [Dashboards](http://localhost:3000/dashboards) > `Section 6 Verification` and you should see a dashboard with the rate of logs coming from the mythical apps as well as panels showing the logs themselves for the server and requester
 
 <img width="913" alt="image" src="https://github.com/user-attachments/assets/01b5718b-aa1c-47d6-92a1-206aca81066c" />
 
