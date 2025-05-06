@@ -281,7 +281,7 @@ prometheus.scrape "postgres" {
     scrape_interval = "2s"
     scrape_timeout  = "2s"
 
-    targets    =  TODO: Fill this in
+    targets    =  //TODO: Fill this in
     forward_to =  [//TODO: Fill this in]
 }
 
