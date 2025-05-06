@@ -1,372 +1,839 @@
-# Introduction to Metrics, Logs, Traces and Profiles in Grafana
+# Building OpenTelemetry and Prometheus native telemetry pipelines with Grafana Alloy
 
-![Introduction To MLTP Architecture Diagram](images/Introduction%20to%20MLTP%20Arch%20Diagram.png)
+<img width="917" alt="image" src="https://github.com/user-attachments/assets/9217f310-39c8-4baa-b748-0a19cc40a5ba" />
+<img width="909" alt="image" src="https://github.com/user-attachments/assets/c74aef87-1586-4dbc-ba88-562ce96f4c2a" />
+<img width="911" alt="image" src="https://github.com/user-attachments/assets/2c49f7f1-fff2-44a3-b271-4f2f82e1be07" />
+<img width="914" alt="image" src="https://github.com/user-attachments/assets/002d5e98-863d-48e8-9fc2-1aa99e3716df" />
 
-This readme has the following sections:
+## Resources for the workshop
 
-- [Introduction to Metrics, Logs, Traces and Profiles in Grafana](#introduction-to-metrics-logs-traces-and-profiles-in-grafana)
-  - [History](#history)
-  - [Prerequisites](#prerequisites)
-  - [Overview](#overview)
-  - [Running the Demonstration Environment](#running-the-demonstration-environment)
-    - [Using Grafana Cloud for Observability (Optional)](#using-grafana-cloud-for-observability-optional)
-    - [OpenTelemetry Collector (Optional)](#opentelemetry-collector-optional)
-  - [Services](#services)
-    - [Grafana](#grafana)
-    - [Mimir](#mimir)
-    - [Loki](#loki)
-    - [Tempo](#tempo)
-    - [Pyroscope](#pyroscope)
-    - [k6](#k6)
-    - [Beyla](#beyla)
-    - [Grafana Alloy](#grafana-alloy)
-      - [Metrics Generation](#metrics-generation)
-      - [Flow and River Configuration](#flow-and-river-configuration)
-  - [Microservice Source](#microservice-source)
-  - ["NoQL" Exploration](#noql-exploration)
-  - [Grafana Cloud](#grafana-cloud)
-  - [Using the OpenTelemetry Collector](#using-the-opentelemetry-collector)
-    - [Running the Demonstration Environment with OpenTelemetry Collector](#running-the-demonstration-environment-with-opentelemetry-collector)
-  - [Span and service graph metrics generation](#span-and-service-graph-metrics-generation)
+- [Mission repo](https://github.com/spartan0x117/intro-to-mltp/tree/main)
+- [Grafana Alloy documentation](https://grafana.com/docs/alloy/latest/)
+  - [Alloy configuration blocks](https://grafana.com/docs/alloy/latest/reference/config-blocks/)
+  - [Alloy components](https://grafana.com/docs/alloy/latest/reference/components/)
+  - [Collect and forward data with Grafana Alloy](https://grafana.com/docs/alloy/latest/collect/)
+  - [Grafana Alloy Tutorials](https://grafana.com/docs/alloy/latest/tutorials/)
 
-## History
+<img width="912" alt="image" src="https://github.com/user-attachments/assets/bc1467ea-b76b-4a8f-97af-91de818b07b6" />
 
-This was originally the companion repository to a series of presentations over the [three pillars of
-observability within Grafana](https://grafana.com/blog/2022/04/01/get-started-with-metrics-logs-and-traces-in-our-new-grafana-labs-asia-pacific-webinar-series/). Whilst that series is now over a year old, we have kept this repository up-to-date with the latest versions of our products and added more functionality as our products have grown.
-
-It is presented as a self-enclosed Docker sandbox that includes all of the components required to run on a local machine and experiment with the products provided.
-
-Since the original series, this repository has seen its use grow. Whilst we still highly recommend everyone to sign up for a Grafana Cloud account, this repository exists as an easy way to get started with Grafana's offerings in a non-cloud, local-based setup. In addition, you can use this setup to experiment with configuration settings on those offerings.
-
-You can also send data from the example microservice application to Grafana Cloud products.
-
-## Prerequisites
-
-The following demonstration environment requires:
-* [Docker](https://www.docker.com/products/docker-desktop/)
-* [Docker Compose (if not using a version of Docker that has it inbuilt)](https://docs.docker.com/compose/install/)
-
-## Overview
-The demos from this series were based on the application and code in this repository, which includes:
-
-* Docker Compose manifest for easy setup.
-* Four-service application:
-  * A service requesting data from a REST API server.
-  * A REST API server that receives requests and utilises a Database for storing/retrieving data for those requests.
-  * A recorder service for storing messages to an AMQP bus.
-  * A Postgres Database for storing/retrieving data from.
-* k6 service running a load test against the above application.
-* Tempo service for storing and querying trace information.
-* Loki service for storing and querying log information.
-* Mimir service for storing and querying metric information.
-* Pyroscope service for storing and querying profiling information.
-* Beyla services for watching the four-service application and automatically generating signals.
-* Grafana service for visualising observability data.
-* Grafana Alloy service for receiving traces and producing metrics and logs based on these traces.
-* A Node Exporter service to retrieve resource metrics from the local host.
-
-## Running the Demonstration Environment
-
-Docker Compose will download the required Docker images, before starting the demonstration environment.
-
-In the following examples, the in-built `compose` command is used with a latest version of Docker (for example, `docker compose up`). If using an older version of Docker with a separate Docker Compose binary, ensure that `docker compose` is replaced with `docker-compose`.
-
-Data will be emitted from the microservice application and be stored in Loki, Tempo, and Prometheus. You can login to the Grafana service to visualize this data.
-
-To execute the environment and login:
-
-1. Start a new command-line interface in your Operating System and run:
-   ```bash
-   docker compose up
-   ```
-2. Login to the local Grafana service at http://localhost:3000/.
-
-   *NOTE:* This assumes that port 3000 is not already in use. If this port is not free, edit the `docker-compose.yml` file and alter the line
-   ```
-   - "3000:3000"
-   ```
-   to some other host port that is free, for example:
-   ```
-   - "3123:3000"
-   ```
-3. Navigate to the [MLT dashboard](http://localhost:3000/d/ed4f4709-4d3b-48fd-a311-a036b85dbd5b/mlt-dashboard?orgId=1&refresh=5s).
-4. Explore the data sources using the [Grafana Explorer](http://localhost:3000/explore?orgId=1&left=%7B%22datasource%22:%22Mimir%22,%22queries%22:%5B%7B%22refId%22:%22A%22%7D%5D,%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D).
-
-The [pre-provisioned dashboard](grafana/definitions/mlt.json) demonstrates a [RED (Rate, Error, Duration)](https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/) overview of the microservice application, where almost all metrics are being generated via trace spans. The dashboard also provides an example of logging.
-
-[Data links](https://grafana.com/docs/grafana/latest/panels-visualizations/configure-data-links/), [exemplars](https://grafana.com/docs/grafana-cloud/data-configuration/traces/exemplars/), and logs are utilized to allow jumping from the dashboard to a Grafana Explore page to observe traces, metrics, and logs in more detail.
-
-The following sections are a brief explanation of each of the most important provided components.
-
-### Using Grafana Cloud for Observability (Optional)
-
-You can swap out the local Observability Stack and instead use Grafana Cloud.
-
-Read the [Using Grafana Cloud Hosted Observability](#Grafana-Cloud) section below to use this environment instead.
-
-### OpenTelemetry Collector (Optional)
-
-You can swap out the Grafana Alloy for the OpenTelemetry collector using an alternative configuration.
-
-Read the [Using the OpenTelemetry Collector](#Using-the-OpenTelemetry-Collector) section below to use this environment instead.
-
-## Services
-### Grafana
-
-Grafana is a multi-platform open source analytics and interactive visualisation web application. For more details about Grafana, read the [documentation](https://grafana.com/docs/grafana/latest/).
-
-The Grafana service is described in the `grafana` section of the [`docker-compose.yml`](docker-compose.yml) manifest.
-
-The Docker Compose manifest:
-* Mounts two repository directories to provide pre-provisioned data sources for data (`grafana/definitions`, `grafana/provisioning`).
-* A [pre-provisioned dashboard](grafana/definitions/mlt.json) for correlating metrics, logs and traces.
-  * The dashboard uses metrics from span traces to provide RED (Rate/Error/Duration) signals.
-  * Data links are built into Grafana panels to pre-populate TraceQL queries based on the data. These act as an initial guide for digging into more detailed trace queries by extending the TraceQL.
-* Exposes port `3000` for local login.
-* Enables two Tempo features, namely span search and service graph support.
-
-The updated `topnav` navigation within Grafana is enabled. If you wish to default back to the old UI, remove the `topnav` feature flag in the `GF_FEATURE_TOGGLES_ENABLE` environment variable for the `grafana` service in the [`docker-compose.yml`](docker-compose.yml) manifest.
-
-### Mimir
-
-Mimir is a backend store for metrics data from various sources. For more details about Mimir, read the [documentation](https://grafana.com/docs/mimir/latest/).
-
-The Mimir service is described in the `mimir` section of the [`docker-compose.yml`](docker-compose.yml) manifest.
-
-The configuration file ([`mimir/mimir.yaml`](mimir/mimir.yaml)):
-* Configures a single service container acting as all relevant microservices.
-* Stores the metrics data in-container (this will be lost on container deletion).
-
-In addition to the scraped metrics, the Mimir service also receives remotely written metrics from the Tempo service, which derives metrics from incoming trace spans.
-
-[This example](http://localhost:3000/explore?left=%7B%22datasource%22:%22mimir%22,%22queries%22:%5B%7B%22datasource%22:%7B%22type%22:%22prometheus%22,%22uid%22:%22mimir%22%7D,%22exemplar%22:true,%22expr%22:%22histogram_quantile%280.95,%20sum%28rate%28mythical_request_times_bucket%5B15s%5D%29%29%20by%20%28le,%20beast%29%29%22,%22interval%22:%22%22,%22refId%22:%22A%22%7D%5D,%22range%22:%7B%22from%22:%22now-5m%22,%22to%22:%22now%22%7D%7D&orgId=1) of the Mimir data source shows a histogram with [exemplars](https://grafana.com/docs/grafana-cloud/data-configuration/traces/exemplars/) (links to relevant traces). The example is available once the system is running and has collected enough data.
-
-### Loki
-
-Loki is a backend store for long-term log retention. For more details about Loki, read the [documentation](https://grafana.com/docs/loki/latest/).
-
-The Loki service is described in the `loki` section of the [`docker-compose.yml`](docker-compose.yml) manifest.
-
-Loki's default configuration is used, and as such no custom configuration file is bound to the container (unlike Mimir and Tempo).
-
-[This example](http://localhost:3000/explore?left=%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22expr%22:%22%7Bjob%3D%5C%22mythical-beasts-requester%5C%22%7D%20%7C%20logfmt%20%7C%20http_method%20%3D%20%5C%22POST%5C%22%20and%20__error__%3D%5C%22%5C%22%22,%22queryType%22:%22range%22,%22datasource%22:%7B%22type%22:%22loki%22,%22uid%22:%22loki%22%7D,%22editorMode%22:%22code%22,%22range%22:true,%22instant%22:true%7D%5D,%22range%22:%7B%22from%22:%22now-5m%22,%22to%22:%22now%22%7D%7D&orgId=1) shows the Loki data source using LogQL.
-
-The microservices application sends its logs directly to the Loki service in this environment, via its REST API. There is the potential to switch this to the [Loki Docker driver](https://grafana.com/docs/loki/latest/clients/docker-driver/), if desired. To do so, follow the instructions for the driver, and then remove the three occurrences of:
+## Environment set up
+Before getting started, make sure you:
+- install [Docker](https://www.docker.com/products/docker-desktop/) and [Docker Compose](https://docs.docker.com/compose/install/) 
+- clone the [repo](https://github.com/spartan0x117/intro-to-mltp) for the lab environment :
 ```
-- LOGS_TARGET=http://loki:3100/loki/api/v1/push
+git clone https://github.com/spartan0x117/intro-to-mltp.git
 ```
-in the [`docker-compose.yml`](docker-compose.yml) manifest for the `mythical-receiver`, `mythical-server` and `mythical-recorder` services. This will instead force the microservices to output logs to `stdout` which will be picked up by the Loki Docker driver.
+- start a new command-line interface in your Operating System and run: 
+```
+docker compose up --build -d
+```
+# Alloy 101 
+<img width="909" alt="image" src="https://github.com/user-attachments/assets/d37cbbce-2526-443c-83e5-9c0a3a6b481d" />
+<img width="911" alt="image" src="https://github.com/user-attachments/assets/d0f35b76-3aa0-48c6-8678-8310ffc29cdc" />
+<img width="908" alt="image" src="https://github.com/user-attachments/assets/daf627f6-f743-4eda-b821-1794aabac1a9" />
+<img width="911" alt="image" src="https://github.com/user-attachments/assets/f2aca8c7-a63c-4735-aceb-c5f64155cefc" />
+<img width="912" alt="image" src="https://github.com/user-attachments/assets/85f2ea42-93d3-4477-be06-edaf84af1800" />
+<img width="907" alt="image" src="https://github.com/user-attachments/assets/d669cbc0-dad6-4997-99dc-fed755b3c295" />
+<img width="916" alt="image" src="https://github.com/user-attachments/assets/8e8422f6-205b-46e0-b19c-09eb4dbebd31" />
+<img width="915" alt="image" src="https://github.com/user-attachments/assets/87e09054-937f-429e-a9e2-7167e1bf65ff" />
 
-### Tempo
+## Alloy syntax
 
-Tempo is a backend store for longterm trace retention. For more details about Tempo, read the [documentation](https://grafana.com/docs/tempo/latest/).
+### Think of Alloy as our secret weapon that can collect, transform, and deliver our telemetry data. 
 
-The Tempo service is described in the `tempo` section of the [`docker-compose.yml`](docker-compose.yml) manifest.
+To instruct Alloy on how we want that done, we must write these instructions in a language (`Alloy syntax`) that Alloy understands. 
 
-The Tempo service imports a configuration file ([`tempo/tempo.yaml`](tempo/tempo.yaml)) that initialises the service with some sensible defaults as well as allowing the receiving of traces in a variety of different formats.
+![Alt Text](https://media0.giphy.com/media/v1.Y2lkPTc5MGI3NjExemZxYWc0MzNuczMyYXNmcjkxdDg4Njg2amw0MmJ5anIxbzNjczdlZCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/Mb9dQnfZXSBYMhU2Nv/giphy.gif)
 
-Tempo is also configured to generate metrics from incoming trace spans as part of it's configuration. As such, this no longer occurs via Grafana Alloy (although the original configuration for the Alloy to carry this out has been left in the Alloy configuration file as a guide).
+<img width="953" alt="image" src="https://github.com/user-attachments/assets/1d69eaf5-9508-4de1-990d-432d7668ec50" />
+<img width="937" alt="image" src="https://github.com/user-attachments/assets/1ecaad57-caea-4e5c-b462-22eb14e7a6cd" />
+<img width="943" alt="image" src="https://github.com/user-attachments/assets/46bb6241-a41f-4975-a700-6f35eff20286" />
+<img width="942" alt="image" src="https://github.com/user-attachments/assets/5230684e-e7c6-40d1-8148-40a02e0219f5" />
 
-For an example of a simple search, look at the Explorer page using the Tempo data source, [here](http://localhost:3000/explore?orgId=1&left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22datasource%22:%7B%22type%22:%22tempo%22,%22uid%22:%22tempo%22%7D,%22queryType%22:%22traceqlSearch%22,%22limit%22:20,%22filters%22:%5B%7B%22id%22:%224ad1d67f%22,%22operator%22:%22%3D%22,%22scope%22:%22span%22%7D,%7B%22id%22:%22service-name%22,%22tag%22:%22service.name%22,%22operator%22:%22%3D%22,%22scope%22:%22resource%22,%22value%22:%5B%22mythical-server%22%5D,%22valueType%22:%22string%22%7D,%7B%22id%22:%22min-duration%22,%22tag%22:%22duration%22,%22operator%22:%22%3E%22,%22valueType%22:%22duration%22,%22value%22:%22100ms%22%7D%5D%7D%5D,%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D). **Note:** Native searches no longer exist, and these are interpreted as TraceQL before execution. See the bottom of the search panel to show the equivalent TraceQL
+### When figuring out which components to use, focus your attention to what comes after the name of the ecosystem to figure out what that component does. 
 
-[This example](http://localhost:3000/explore?orgId=1&left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22datasource%22:%7B%22type%22:%22tempo%22,%22uid%22:%22tempo%22%7D,%22queryType%22:%22traceql%22,%22serviceName%22:%22mythical-requester%22,%22minDuration%22:%22100ms%22,%22limit%22:20,%22query%22:%22%7B%20.service.name%20%3D%20%5C%22mythical-server%5C%22%20%26%26%20duration%20%3E%20100ms%20%7D%22%7D%5D,%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D) uses the same parameters as above, but in TraceQL (a fully featured tracing query language).
+<img width="944" alt="image" src="https://github.com/user-attachments/assets/28d46b11-664a-43fb-ae96-095d3c9c5173" />
+<img width="944" alt="image" src="https://github.com/user-attachments/assets/31bda298-1b8a-474f-8a05-b291e406c758" />
+<img width="948" alt="image" src="https://github.com/user-attachments/assets/e9a9d603-9a30-4116-9cde-346ee8051a9f" />
+<img width="938" alt="image" src="https://github.com/user-attachments/assets/1250387f-7e0e-4577-8ecb-332af321730c" />
+<img width="940" alt="image" src="https://github.com/user-attachments/assets/56e5dbdf-57d1-43bb-87b7-6e1cf6efb13e" />
+<img width="908" alt="image" src="https://github.com/user-attachments/assets/47390611-2110-4609-b639-08d15d13ddcd" />
 
-For an example of the mini-APM table and Service Graphs, use the 'Service Graph' tab [here](http://localhost:3000/explore?orgId=1&left=%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22datasource%22:%7B%22type%22:%22tempo%22,%22uid%22:%22tempo%22%7D,%22queryType%22:%22serviceMap%22%7D%5D,%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D).
+### While reading up on components within the Alloy docs, pay special attention to the following sections:
+- usage
+- arguments
+- blocks
 
-Traces are instrumented using the OpenTelemetry SDK, more details on which can be found [here](https://opentelemetry.io/docs/).
-### Pyroscope
+The `usage` section gives you an example of how this particular component could be configured. 
+<img width="911" alt="image" src="https://github.com/user-attachments/assets/add64bd4-0831-46eb-9041-0757eaae8d67" />
 
-Pyroscope is a continuous profiling backend store.
+The `arguments` and `blocks` sections list what you could do with the data. Pay close attention to the name, type, description, default, and required columns so Alloy could understand what you want it to do! 
+<img width="911" alt="image" src="https://github.com/user-attachments/assets/53b1ecea-5818-420e-bc10-151309afd9d8" />
+<img width="914" alt="image" src="https://github.com/user-attachments/assets/a4ae1137-1ff6-423d-8977-28246e1bbe0e" />
 
-The Pyroscope service is embedded in Grafana Alloy.
+# Tactical training 
 
-Pyroscope scrape [pprof](https://github.com/google/pprof) based profiles from the Mythical microservices. It uses the [Pyroscope NodeJS](https://github.com/grafana/pyroscope-nodejs) bindings in source instrumentation.
+## Lab environment overview
+<img width="1433" alt="image" src="https://github.com/user-attachments/assets/6fd37912-58ab-4620-a246-6babc04d8f5d" />
 
-Samples are sent to Grafana Alloy, which receives all incoming profile samples and then writes them to the Pyroscope service.
+## Common tasks
+We will be using the `config.alloy` file to build pipelines for Infrastructure Observability and Applications Observability. 
 
-You can see an example of profiling in action once the system is running by using the Explorer to visualise the profiles stored [here](http://localhost:3000/a/grafana-pyroscope-app/explore?searchText=&panelType=time-series&layout=grid&hideNoData=off&explorationType=all&var-serviceName=mythical-server&var-profileMetricId=process_cpu:cpu:nanoseconds:cpu:nanoseconds&var-spanSelector=&var-dataSource=pyroscope&var-filters=&var-filtersBaseline=&var-filtersComparison=&var-groupBy=).
+Whenever we make changes to the file, we must reload the config. 
 
-### k6
+### Reloading the config
 
-k6 is a load testing suite that allows you to synthetically load and monitor your application. For more details about k6, read the [documentation](https://k6.io/docs/).
+To reload Alloy's config, hit the following endpoint in a browser or with a tool like `curl`:
 
-The k6 service is described in the `k6` section of the [`docker-compose.yml`](docker-compose.yml) manifest.
-
-The k6 service uses the script ([`k6/mythical-loadtest.js`](k6/mythical-loadtest.js)) to define the tests that it should run. These are currently a `GET`, `POST` and `DELETE` set of tests on the application's API endpoints.
-
-k6 can run one of more VU (Virtual Users) concurrently, to simulate parallel load on the application. Currently, the number of VUs is set to 1, although this may be changed by altering the value for the `K6_VUS` environment variable in the relevant Docker Compose YAML file.
-**Note:** The higher the number of VUs executing, the higher the load on the machine running the Docker Compose sandbox, as this will transfer a significant amount of data. You may find tests being throttled if you ramp this number up without enough resource/bandwidth.
-
-k6 will generate [metrics](https://k6.io/docs/using-k6/metrics/) about the tests that it carries out, and will send these to the running Mimir instance. These metrics can then be used to determine the latencies of endpoints, number of errors occurring, etc. The official Grafana dashboard for k6 is included, and once the sandbox is running, may be found [here](http://localhost:3000/d/01npcT44k/official-k6-test-result?orgId=1&refresh=10s).
-
-### Beyla
-
-Beyla is an eBPF-based tool for generating metrics and trace data without the need for application instrumentation. For more details about Beyla, read the [documentation](https://grafana.com/docs/grafana-cloud/monitor-applications/beyla/).
-
-The Beyla services are described in the `beyla-requester`, `beyla-server` and `beyla-recorder` sections of the [`docker-compose.yml`](docker-compose.yml) manifest.
-
-The configuration for Beyla can be found in the [`beyla/config.yaml`](beyla/config.yaml) file, and describes the main application endpoints for the Mythical Server service.
-
-Beyla operates by using hooks into the kernel networking layer to examine calls made to it from the specified process. It then generates a set of default metrics and trace types based on the network calls made.
-
-It also uses a subset of the OpenTelemetry environment variables/configuration options to determine where to send those metrics and traces (as well as its own envars and config options to expose extra functionality). See the configuration options for [Beyla here](https://grafana.com/docs/grafana-cloud/monitor-applications/beyla/configure/options/).
-
-For this Docker Compose setup, a Beyla service is required for each of the other containers that should be inspected, as the pid namespace needs to be shared between the application service and the relevant Beyla service. This also allows the unique service naming for each individual application service via Beyla.
-
-Once the Docker Compose project is running, you can see examples of traces that are emitted by Beyla can be [seen here](http://localhost:3000/explore?panes=%7B%228kW%22:%7B%22datasource%22:%22tempo%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22datasource%22:%7B%22type%22:%22tempo%22,%22uid%22:%22tempo%22%7D,%22queryType%22:%22traceqlSearch%22,%22limit%22:20,%22tableType%22:%22traces%22,%22filters%22:%5B%7B%22id%22:%22f5c8c83c%22,%22operator%22:%22%3D%22,%22scope%22:%22span%22%7D,%7B%22id%22:%22service-name%22,%22tag%22:%22service.name%22,%22operator%22:%22%3D~%22,%22scope%22:%22resource%22,%22value%22:%5B%22beyla-mythical-recorder%22,%22beyla-mythical-requester%22,%22beyla-mythical-server%22%5D,%22valueType%22:%22string%22%7D%5D,%22groupBy%22:%5B%7B%22id%22:%2285840e80%22,%22scope%22:%22span%22%7D%5D%7D%5D,%22range%22:%7B%22from%22:%22now-5m%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1), and an example of the metrics that are emitted by Beyla can be [seen here](http://localhost:3000/explore?panes=%7B%228kW%22:%7B%22datasource%22:%22mimir%22,%22queries%22:%5B%7B%22refId%22:%22B%22,%22expr%22:%22histogram_quantile%280.95,%20rate%28http_server_duration_seconds_bucket%7Bhttp_route%3D~%5C%22%5C%5C%5C%5C%2F%28unicorn%7Cowlbear%7Cbeholder%7Cmanticore%7Cilithid%29%5C%22%7D%5B1m%5D%29%29%22,%22range%22:true,%22instant%22:true,%22datasource%22:%7B%22type%22:%22prometheus%22,%22uid%22:%22mimir%22%7D,%22editorMode%22:%22code%22,%22legendFormat%22:%22__auto%22,%22hide%22:false%7D%5D,%22range%22:%7B%22from%22:%22now-5m%22,%22to%22:%22now%22%7D%7D%7D&schemaVersion=1&orgId=1).
-
-
-### Grafana Alloy
-
-**Note:** We have now moved to a default of an Alloy configuration and removed the prior static config.
-
-Grafana Alloy is a Grafana distribution of the OpenTelemetry collector, receiving metrics, logs and traces and forwarding them to relevant database stores. For more details about Grafana Alloy, read the [documentation](https://grafana.com/docs/alloy/latest/).
-
-Grafana Alloy acts as:
-* A Prometheus scraping service and metric/label rewriter.
-* A Promtail (Loki logs receiver) service and processor.
-* A Tempo trace receiver and span processor.
-* A Pyroscope profile receiver and processor.
-* Remote writer for MLT data to Grafana Cloud (or any other compatible storage system).
-
-In this example environment, Grafana Alloy:
-* Receives metrics data, via scrape configs, emitted by:
-  * The microservice application.
-  * The Mimir service for operational monitoring.
-  * The Loki service for operational monitoring.
-  * The Tempo service for operatational monitoring.
-  * The Pyroscope service for profiling.
-  * The Alloy itself, for operational monitoring.
-  * The installed Node Exporter service.
-* Receives trace data, via trace configs, emitted by the microservice application.
-* Generates automatic logging lines based on the trace data received.
-* Sends metric, log and trace data onwards to the Mimir, Loki and Tempo services, respectively.
-* Has optional (unused by default) configurations for metrics generation and trace tail sampling.
-
-Grafana Alloy implements a graph-based configuration via a programatic language, to define the functionality required.
-
-Once running, you can observe the configuration running on the Grafana Alloy itself by navigating to [http://localhost:12347](http://localhost:12347). This webpage will allow you to view all of the current components being used for receiving MLT signals, as well as graphs denoting source and target relationships between components.
-
-The full configuration for Grafana Alloy can be found [here](alloy/config.alloy).
-
-Read the [Debugging](https://grafana.com/docs/alloy/latest/flow/monitoring/debugging/) documentation for Grafana Alloy for more details.
-
-The [tutorial](https://grafana.com/docs/alloy/latest/get-started/configuration-syntax/) guide to working with Alloy's configuration language is a great first starting point, whilst the full [reference guide](https://grafana.com/docs/alloy/latest/reference/) for shows the currently supported components and configuration blocks.
-
-Note that as Grafana Alloy scrapes metrics for every service defined in the [`docker-compose.yml`](docker-compose.yml) that a significant number of metric [active series](https://grafana.com/docs/grafana-cloud/billing-and-usage/active-series-and-dpm/) are produced (approximately 11,000 at time of writing).
-
-#### Metrics Generation
-
-It should be noted that since [v1.4.0](https://github.com/grafana/tempo/blob/main/CHANGELOG.md#v140--2022-04-28), Tempo has included the ability to generate [RED (Rate, Error, Duration)](https://grafana.com/blog/2018/08/02/the-red-method-how-to-instrument-your-services/) [span](https://grafana.com/docs/tempo/latest/metrics-generator/span_metrics/) and [service graph](https://grafana.com/docs/tempo/latest/metrics-generator/service_graphs/) metrics.
-
-As such, the Grafana Alloy configuration now includes a commented section where those metrics used to be generated; this is now handled directly in Tempo via server-side metrics generation.
-
-Whilst this is convenient for many users, you may prefer to generate metrics locally via Grafana Alloy rather than Tempo server-side. These include environments where tail-based sampling may be utilized to discard certain traces.
-
-Tempo metrics generation will only generate span and service graph metrics for trace spans that Tempo receives. If tail sampling is active, then a full view of the metrics in a system will not be available.
-
-In these instances, using Grafana Alloy to generate metrics can ensure a complete set of metrics for all traces span data are generated, as the Alloy carries out tail sampling post-metrics generation.
-
-#### Flow and River Configuration
-
-Whilst the default configuration is via Flow's River language, you can switch this to a provided Static configuration defined in YAML.
-
-To use the Static configuration instead, follow the inline commented instructions in the `alloy` service section of the [`docker-compose.yml`](docker-compose.yml) file.
-
-Once altered, the Static configuration can be used by restarting Docker Compose if it is currently running:
 ```bash
-docker compose restart
+curl -X POST http://localhost:12347/-/reload
 ```
-or using the startup commands in the 'Running the Demonstration Environment' section.
 
-## Microservice Source
+If the config is valid, you should see a response like the following:
 
-The source for the microservice application can be found in the [`source`](source) directory. This three-service application utilizes a [PostgreSQL](https://www.postgresql.org/) database and an [AMQP](https://www.amqp.org/) bus to store data.
+```
+config reloaded
+```
+## Infrastructure Observability - collect, transform, and export logs and metrics
+### Section 1: Collect and transform logs from Alloy
+#### Objectives
 
-The services are written in [JavaScript](https://www.javascript.com/) and execute under [NodeJS](https://nodejs.org/en) inside [Docker](https://www.docker.com/products/docker-desktop/) containers.
+- Collect logs from Alloy using the [`logging`](https://grafana.com/docs/alloy/latest/reference/config-blocks/logging/) block
+- Use [`loki.relabel`](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.relabel/) to add labels to the logs
+- Use [`loki.write`](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.write/) to write the logs to Loki
 
-The [`requester`](source/mythical-beasts-requester/index.js) service makes 'random' requests to the [`server`](source/mythical-beasts-server/index.js), which then inserts, retrieves or deletes data from the Postgres database. The `requester` service also stores data to the AMQP queue via the [`recorder`](source/mythical-beasts-recorder/index.js) service.
+#### Instructions
 
-All three services use common code to deal with the [`queue`](source/common/queue.js), [`logging`](source/common/logging.js) and [`tracing`](source/common/tracing.js) requirements they have. The latter is an example of a simple shim API library for utilising the OpenTelemetry SDK in an application.
+Open `config.alloy` in your editor and copy the following starter code into it:
 
-There is a common [`Dockerfile`](source/docker/Dockerfile) that is used to build all three services.
+```alloy/config.alloy
+//Section 1
 
-An example pipeline stage in Alloy to rewrite timestamps can be enabled by uncommenting the `TIMESHIFT` environment variable for the `mythical-requester` service. See details in the [Alloy configuration file](alloy/config.alloy).
+logging {
+  format = "//TODO: Fill this in"
+  level  = "//TODO: Fill this in"
+  write_to = [//TODO: Fill this in]
+}
 
-## "NoQL" Exploration
+loki.relabel "alloy_logs" {
+   forward_to = [//TODO: Fill this in]
 
-From Grafana 11, Grafana Labs introduced query-less experiences for exploring supported signals. This sandbox supports query-less metrics, logs, traces and profile investigations via the `Explore-><Signal>` menu options.
+    rule {
+        target_label = "//TODO: Fill this in"
+        replacement = "//TODO: Fill this in"
+    }
 
-These apps allow you to use specify relevant data sources and then use the Grafana interface to drilldown into the relevant signals based on associated labels and attributes. This allows a user to quickly find anomalous signals and determine their root cause without having to craft a relevant PromQL, LogQL or TraceQL query.
+    rule {
+        target_label = "//TODO: Fill this in"
+        replacement = "//TODO: Fill this in" 
+    }
+}
 
-**Note:** Both Explore Traces and Explore Profiles are currently in public preview and may change before finally being made generally available.
+loki.write "mythical" {
+    endpoint {
+       url = "//TODO: Fill this in"
+    } 
+}
+```
 
-## Grafana Cloud
+For the `logging` block, we want to set the log format to "logfmt" and the log level to "debug" and write the logs to the `loki.relabel.alloy_logs` component's receiver.
 
->**Note**: By default, as mentioned in the Grafana Alloy section, metrics, logs, traces and profiles are scraped by default from every service. If sending metrics to Grafana Cloud, check the number of signals (for example, for metrics, the number of [active series](https://grafana.com/docs/grafana-cloud/billing-and-usage/active-series-and-dpm/)) that you can store without additional cost.
+For the `loki.relabel` component, we want to set the `group` label to "infrastructure" and the `service` label to "alloy" and forward the logs to the `loki.write.mythical` component's receiver.
 
-In the following configuration instructions, you can generate a general purpose `write`` scope token that will work with metrics, logs and traces, but note that the profiling token is separate and needs to be generated specifically for Pyroscope.
+For the `loki.write` component, we want to ship the logs to `http://loki:3100/loki/api/v1/push`.
 
-This demo can be run against Grafana Cloud by configuring the `alloy/endpoints-cloud.json` file for each signal. This differs slightly for each of the signals.
+<img width="910" alt="image" src="https://github.com/user-attachments/assets/887f206b-683f-4107-aaf3-cb891c2226d1" />
 
-1. Metrics - Navigate to the `Prometheus` section of your [Grafana Cloud stack](https://grafana.com/docs/grafana-cloud/account-management/cloud-portal/) and scroll to the `Sending metrics` section. Use the `url` denoted to replace the `<metricsUrl>` value in the JSON file. If you do not already have a scope token to write metrics, you can generate one under the `Password / API Token` section. *Ensure that the token is a `write` scope token.* Replace the `<metricsUsername>` and `<metricsPassword>` entries with the username and token denoted in the Cloud Stack page.
-2. Logs - Navigate to the `Loki` section of your [Grafana Cloud stack](https://grafana.com/docs/grafana-cloud/account-management/cloud-portal/) and scroll to the `Sending Logs` section. Use the `url` denoted to replace the `<logsUrl>` value in the JSON file, but do not include the username and token in the url. It should look something like this: `https://logs-prod3.grafana.net/loki/api/v1/push`. If you do not already have a scope token to write metrics, you can generate one under the `Replace <Grafana.com API Token>` section. *Ensure that the token is a `write` scope token.* Replace the `<logsUsername>` and `<logsPassword>` entries with the username and token denoted in the Cloud Stack page.
-3. Traces - Navigate to the `Tempo` section of your [Grafana Cloud stack](https://grafana.com/docs/grafana-cloud/account-management/cloud-portal/) and scroll to the `Sending data to Tempo` section. Use the `url` denoted to replace the `<tracesUrl>` value in the JSON file. If you do not already have a scope token to write metrics, you can generate one under the `Your <Grafana.com API Token>` section. *Ensure that the token is a `write` scope token.* Take a note of the username and token, and then run the following command in your local shell:
-   ```bash
-   echo '<username>:<token>' | base64
-   ```
-   where `<username>` is the Tempo username and `<token>` is the token you generated with the `write` scope. Copy the output from running the command and use it to replace the value of `<tracesBase64AuthToken>` in the JSON file.
-4. Profiles -  Navigate to the `Pyroscope` section of your [Grafana Cloud stack](https://grafana.com/docs/grafana-cloud/account-management/cloud-portal/) and scroll to the `SDK or agent configuration` section. Use the `url` denoted to replace the `<profilesUrl>` value in the JSON file. You will need to generate a `write` scope token for Pyroscope specifically, do this by selecting the `Generate now` link in the `Password` block of the `SDK or agent configuration` section. *Ensure that the token is a `write` scope token.* Replace the `<profileUsername>` and `<profilePassword>` entries with the username and token denoted in the Cloud Stack page.
-5. Run `docker compose -f docker-compose-cloud.yml up`
+### Reloading the config
 
-The Grafana Alloy will send all the signals to the Grafana Cloud stack specified in the `alloy/endpoints-cloud.json` file.
+To reload Alloy's config, hit the following endpoint in a browser or with a tool like `curl`:
 
-## Using the OpenTelemetry Collector
+```bash
+curl -X POST http://localhost:12347/-/reload
+```
 
-You can also use an alternative environment that uses the OpenTelemetry Collector in place of Grafana Alloy.
-Note that this only works for the local version of the repository, and *not* Grafana Cloud.
+If the config is valid, you should see a response like the following:
 
-### Running the Demonstration Environment with OpenTelemetry Collector
+```
+config reloaded
+```
 
-Docker Compose downloads the required Docker images, before starting the demonstration environment.
+#### Verification
 
-In the following examples, the in-built `compose` command is used with a latest version of Docker (for example, `docker compose up`). If using an older version of Docker with a separate Docker Compose binary, ensure that `docker compose` is replaced with `docker-compose`.
+Navigate to the [Dashboards](http://localhost:3000/dashboards) page and select the `Section 1 Verification` dashboard.
 
-Data is emitted from the microservice application and stored in Loki, Tempo, and Prometheus. You can login to the Grafana service to visualize this data.
+You should see the panels populated with data, showing the number of logs being sent by Alloy as well as the logs themselves.
 
-*Note:* The OpenTelemetry Collector does not currently include an exporter for Pyroscope, and therefore the Docker Compose manifest for the OpenTelemetry Collector does not support the export of profiles.
+<img width="911" alt="image" src="https://github.com/user-attachments/assets/07d04e94-caa5-4316-92dc-a50ebfdb333a" />
 
-To execute the environment and login:
+### Section 2: Collect and transform infrastructure metrics
 
-1. Start a new command-line interface in your Operating System and run:
-   ```bash
-   docker compose -f docker-compose-otel.yml up
-   ```
-2. Login to the local Grafana service at http://localhost:3000/.
+#### Objectives
 
-   *NOTE:* This assumes that port 3000 is not already in use. If this port is not free, edit the `docker-compose.yml` file and alter the line
-   ```
-   - "3000:3000"
-   ```
-   to some other host port that is free, for example:
-   ```
-   - "3123:3000"
-   ```
-3. Explore the data sources using the [Grafana Explorer](http://localhost:3000/explore?orgId=1&left=%7B%22datasource%22:%22Mimir%22,%22queries%22:%5B%7B%22refId%22:%22A%22%7D%5D,%22range%22:%7B%22from%22:%22now-1h%22,%22to%22:%22now%22%7D%7D).
+- Use the [discovery.http](https://grafana.com/docs/alloy/latest/reference/components/discovery/discovery.http/) component to discover the targets to scrape
+- Scrape the targets' metrics using the [`prometheus.scrape`](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.scrape/) component
+- Use [`prometheus.remote_write`](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.remote_write/)to write the metrics to the locally running Mimir
 
-The OpenTelemetry Collector is defined as the `opentelemetry-collector` service in the [`docker-compose-otel.yml`](docker-compose-otel.yml) manifest.
+We are going to introduce a new component called service discovery (`discovery.http`). 
 
-A basic configuration that mimics that of the Grafana Alloy configuration can be found in the [`otel/otel.yml`](otel/otel.yml) configuration file.
+When you are observing your infrastructure/applications, it's likely that you are working with a dynamic environment.
+<img width="907" alt="image" src="https://github.com/user-attachments/assets/f420f7c3-87c6-40c6-9be4-d594aa498338" />
 
-In much the same way that the Grafana Alloy configuration operates, this scrapes several targets to retrieve Prometheus metrics before batching them and remote writing them to the local Mimir service.
 
-Additionally, the OpenTelemetry Collector receives traces via OTLP gRPC, batches them, and then remote writes them to the local Tempo instance.
+There could be 1000 servers going up and down whose names and addresses you don't know.
+<img width="908" alt="image" src="https://github.com/user-attachments/assets/fe1aae3a-4552-4c1a-8c34-6d05e18b1be6" />
 
-## Span and service graph metrics generation
-Span metrics and service metrics are also available, but have not been attached to the trace receiver defined in the Alloy configuration file as generation is handled in Tempo by default. You may switch to Alloy-based metrics generation by following the directions in the [`alloy/config.alloy`](alloy/config.alloy) file in the the `otlp_receiver` tracing configuration section. There are comments showing you which lines to uncomment to add both metrics generator collectors to add to the graph. You will also need to comment out the metrics generation in [`tempo/tempo.yaml`](tempo/tempo.yaml) to generate metrics from the Alloy rather than in Tempo (the same holds true for the OpenTelemetry metrics generation configuration sections). You can do the equivalent metrics generation in the OpenTelemetry Collector by following the relevant instructions on uncommenting/commenting `processors`, `exporters` and `receivers` sections in [`otel/otel.yaml`](otel/otel.yaml).
+You want to avoid having to manage this ever-changing list of things to scrape and get metrics from yourself.
 
-There are occasionally good reasons to use local span metrics and service graph generation instead of relying on the Tempo backend to do so. Cases include an oversight of your entire application metrics, which could potentially be obscured should you enable tail sampling (as the Tempo metrics generator will only generate metrics for trace spans that it ingests). Because tail sampling can be configured in the pipeline at a later stage to that of metrics generation, this ensures that all traces spans can be used to generate a complete metrics view regardless if those traces are discarded later in the pipeline.
+For example, let's say you are working with Amazon instances. Instead of hard coding all the names and addresses, you could reach out to an Amazon endpoint and have it find all of the instances for you and expose those as targets so alloy could scrape it.
 
->**Note:**
-* The naming scheme in Grafana Alloy and OpenTelemetry collector is different to that of Tempo. The newer [spanmetrics connector](https://github.com/open-telemetry/opentelemetry-collector-contrib/blob/main/connector/spanmetricsconnector/README.md#span-to-metrics-processor-to-span-to-metrics-connector) details the changes, but in the provided dashboards, any reference to the metrics prefix `traces_spanmetrics_latency_` should be altered to `traces_spanmetrics_duration_milliseconds_`, should you choose to use Grafana Alloy/OpenTelemetry generated metrics.
-* Metrics generation adds a significant load to the Grafana Alloy/OpenTelemetry Collector. You may find that on machines with smaller resources that removing the k6 service (by commenting it out in the relevant Docker Compose manifests, or removing it entirely) will prevent unexpected resource use and/or container failures due to limited CPU and memory resources.
+
+
+#### Instructions
+
+Open `config.alloy` in your editor and copy the following code into it:
+
+```alloy
+//Section 2
+discovery.http "service_discovery" {
+    url = "//TODO: Fill this in"
+    refresh_interval = "2s"
+}
+
+prometheus.scrape "infrastructure" {
+    scrape_interval = "2s"
+    scrape_timeout  = "2s"
+
+    targets    = //TODO: Fill this in
+    forward_to = [//TODO: Fill this in]
+}
+
+prometheus.remote_write "mimir" {
+   endpoint {
+    url = "//TODO: Fill this in"
+   }
+}
+```
+
+In this section, we will be using the `discovery.http` component to ping an HTTP within our lab envirohment in charge of finding targets: "http://service-discovery/targets.json"
+
+This http endpoints are aware of all instances of loki, tempo, mimir, and pyroscope databases that are currently running within our environment
+
+We will use a `prometheus.scrape` component to scrape metrics from the discovered targets.
+
+As a last step, we will configure the `prometheus.remote_write` component to write the metrics to a local Mimir database ("http://mimir:9009/api/v1/push")
+
+<img width="912" alt="image" src="https://github.com/user-attachments/assets/845a4274-65e4-46da-868b-0fb71a8f92be" />
+
+Don't forget to [reload the config](#reloading-the-config) after finishing.
+
+#### Verification
+
+Navigate to the [Dashboards](http://localhost:3000/dashboards) page and select the `Section 2 Verification` dashboard.
+
+You should see an `up` value of 1 for the Loki, Mimir, Tempo, and Pyroscope services.
+
+<img width="911" alt="image" src="https://github.com/user-attachments/assets/a7f7d7f8-e0d8-4cc2-b76a-c0d03e55d8d5" />
+
+#### Alloy UI
+
+Alloy UI is a useful tool that helps you visualize how Alloy is configured and what it is doing so you are able to debug efficiently. 
+
+Navigate to localhost:12347 to see the list of components (orange box) that alloy is currently configured with.
+Click on the blue ‘view’ button on the right side (red arrow).
+<img width="914" alt="image" src="https://github.com/user-attachments/assets/5f4ac3f7-ab05-43f2-9840-0bac97a59fdd" />
+
+You will see details (green box) about what this component is configured with and what it is exporting.
+You can also access the links to view the documentation (orange arrow) for the component and the live debugging feature (yellow arrow). 
+<img width="907" alt="image" src="https://github.com/user-attachments/assets/84934f68-4964-4203-9dd5-47693d1a7505" />
+
+Navigate to the ‘Graph’ tab (blue arrow) to access the graph of components and how they are connected.
+
+The number (red box) shown on the dotted lines shows the rate of transfer between components. The window at the top (orange box) configures the interval over which alloy should calculate the per-second rate, so a window of ‘10’ means that alloy should look over the last 10 seconds to compute the rate.
+
+The color of the dotted line signifies what type of data are being transferred between components. See the color key (purple box) for clarification. 
+
+<img width="910" alt="image" src="https://github.com/user-attachments/assets/95b20759-971f-410d-9598-d5db3213eef7" />
+
+The Clustering tab (green box) shows the nodes in the Alloy cluster. Clustering is used to distribute scrape targets among one or more Alloy instances that you have configured to operate in the same cluster. Clustering is only available for some components, and to keep things simple we will not be covering it in this workshop.
+
+If you’re curious, the [documentation](https://grafana.com/docs/alloy/latest/get-started/clustering/) covers more about clustering.
+
+<img width="916" alt="image" src="https://github.com/user-attachments/assets/f39f322c-d0dc-420e-b3d3-4e2777c8c326" />
+
+
+### Section 3: Collect and transfrom metrics from Postgres DB
+
+#### Objectives
+
+- Expose metrics from the Postgres DB using the [`prometheus.exporter.postgres](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.exporter.postgres/) component
+- Collect metrics from Postgres using the [`prometheus.scrape`](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.scrape/) component
+- Use the [`prometheus.relabel`](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.relabel/) to 
+  - add the `group="infrastructure"` and `service="postgres"` labels
+  - replace the value of 'instance' label for a value that matches the regex ("^postgresql://([^/]+)")
+- [Write](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.remote_write/) the metrics to Mimir
+
+#### Instructions
+
+Open `config.alloy` in your editor and copy the following code into it:
+
+```alloy
+//Section 3
+prometheus.exporter.postgres "mythical" {
+    data_source_names = ["postgresql://postgres:mythical@mythical-database:5432/postgres?sslmode=disable"]
+}
+
+prometheus.scrape "postgres" {
+    scrape_interval = "2s"
+    scrape_timeout  = "2s"
+
+    targets    =  TODO: Fill this in
+    forward_to =  [//TODO: Fill this in]
+}
+
+prometheus.relabel "postgres" {
+    forward_to =  [//TODO: Fill this in]
+
+    rule {
+        target_label = "//TODO: Fill this in"
+        replacement  = "//TODO: Fill this in"
+    }
+    
+    rule {
+        target_label = "//TODO: Fill this in"
+        replacement  = "//TODO: Fill this in"
+    }
+
+ //What we have: postgres_table_rows_count{instance="postgresql://mythical-database:5432/postgres"}
+ //What we want: postgres_table_rows_count{instance="mythical-database:5432/postgres"}
+    
+    rule {
+        // Replace the targeted label.
+        action        = "//TODO: Fill this in"
+
+        // The label we want to replace is 'instance'.
+        target_label  = "//TODO: Fill this in"
+
+        // Look in the existing 'instance' label for a value that matches the regex.
+        source_labels = ["//TODO: Fill this in"]
+        regex         = "^postgresql://(.+)"
+        
+        // Use the first value found in the 'instance' label that matches the regex as the replacement value.
+        replacement   = "$1"
+    }
+}
+```
+
+For the `prometheus.scrape` component, we want to scrape the `prometheus.exporter.postgres.mythical` component's targets and forward the metrics to the `prometheus.relabel.postgres` component's receiver.
+
+For the `prometheus.relabel` component, we want to add the `group="infrastructure"` and `service="postgres"` labels to the metrics.
+
+We also want to modify the `instance` label to clean it up. The regex `"^postgresql://(.+)"` will extract the value after `postgresql://`.
+
+<img width="909" alt="image" src="https://github.com/user-attachments/assets/41d4f468-62c3-46cd-8694-efa2424049c2" />
+
+Don't forget to [reload the config](#reloading-the-config) after finishing.
+
+#### Verification
+
+Navigate to Dashboards > `Section 3 Verification` and you should see a dashboard populating with Postgres metrics. 
+You should also see an instance value of `mythical-database:5432/postgres` instead of `postgresql://mythical-database:5432/postgres`.
+
+<img width="910" alt="image" src="https://github.com/user-attachments/assets/5907b198-b732-4b7d-a0a5-65dcf47f7e4c" />
+
+## Application Observability - collect, transform, and export traces and logs
+
+### Section 4: Collect and transform metrics from Mythical-Services
+
+#### Objectives
+
+- Collect metrics from the Mythical services using the [`prometheus.scrape`](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.scrape/) component
+- [Write](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.remote_write/) metrics to locally running Mimir using the [`prometheus.write.queue`](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.write.queue/) component
+
+#### Instructions
+
+Open `config.alloy` in your editor and copy the following code into it:
+
+```alloy
+//Section 4
+prometheus.scrape "mythical" {
+    scrape_interval = "2s"
+    scrape_timeout  = "2s"
+
+    targets    =  [
+        {"__address__"= "//TODO: Fill this in", group = "//TODO: Fill this in", service = "//TODO: Fill this in"},
+        {"//TODO: Fill this in"}, 
+        ]
+    forward_to =  [//TODO: Fill this in]
+}
+
+prometheus.write.queue "experimental" {
+    endpoint "mimir" {
+        url = "//TODO: Fill this in"
+    }
+}
+
+```
+For the `prometheus.scrape` component, we can define scrape targets for mythical services directly by creating a scrape object. Scrape targets are defined as a list of maps, where each map contains a `__address__` key with the address of the target to scrape. 
+
+Any non-double-underscore keys are used as labels for the target.
+For example, the following scrape object will scrape Mimir's metrics endpoint and add `env="demo"` and `service="mimir"` labels to the target:
+
+```alloy
+targets = [{"__address__" = "mimir:9009",  env = "demo", service = "mimir"}]
+```
+
+For this exercise, create two targets using the following addresses. 
+
+- "mythical-server:4000"
+- "mythical-requester:4001"
+
+Add the following labels for each target. 
+- mythical-server:
+  - group = "mythical", service = "mythical-server"
+- mythical-requester:
+  - group = "mythical", service = "mythical-requester"
+
+Forward the metrics to the `prometheus.write.queue` component we will define next. 
+
+`prometheus.write.queue` component writes metrics to the url of the database we specify. 
+
+Similar to `prometheus.remote_write` component, we use the `endpoint` block we label as "mimir". 
+We set the `url` equal the address of the locally running Mimir: "http://mimir:9009/api/v1/push"
+
+<img width="915" alt="image" src="https://github.com/user-attachments/assets/6c7ebcef-c963-41d6-ba6d-a5805c8104d6" />
+
+Don't forget to [reload the config](#reloading-the-config) after finishing.
+
+#### Verification
+
+Navigate to Dashboards > `Section 4 Verification` and you should see a panel with the request rate per beast flowing!
+
+<img width="909" alt="image" src="https://github.com/user-attachments/assets/e3271544-b277-4114-a969-733ce4da064b" />
+
+### Section 5: Ingesting OTel traces
+
+#### Objectives
+
+- [Receive](https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.receiver.otlp/) spans from the Mythical services and Beyla
+- [Batch spans](https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.processor.batch/) for efficient processing
+- [Write](https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.exporter.otlp/) the spans to a local instance of Tempo
+
+#### Instructions
+
+Open `config.alloy` in your editor and copy the following code into it:
+
+```alloy
+//Section 5
+otelcol.receiver.otlp "otlp_receiver" {
+    grpc {
+        endpoint = "//TODO: Fill in the default value shown in the doc"
+    }
+    http {
+        endpoint = "//TODO: Fill in the default value shown in the doc"
+    }
+    output {
+        traces = [
+            //TODO: Fill this in,
+        ]
+    }
+}
+
+otelcol.processor.batch "default" {
+    output {
+        traces = [
+            //TODO: Fill this in,
+            ]
+    }
+
+    send_batch_size = //TODO: Fill this in 
+	  send_batch_max_size = //TODO: Fill this in
+
+	  timeout = "//TODO: Fill this in"
+}
+
+otelcol.exporter.otlp "tempo" {
+    client {
+        endpoint = "//TODO: Fill this in"
+
+        // This is a local instance of Tempo, so we can skip TLS verification
+        tls {
+            insecure             = true
+            insecure_skip_verify = true
+        }
+    }
+}
+
+
+```
+`otelcol.receiver.otlp`
+
+- To configure the `otelcol.receiver.otlp` component, open the doc for the [otelcol.receiver.otlp](https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.receiver.otlp/) component
+- Find the default port for grpc and set its endpoint equal to it.
+- Find the default port for http and set its endpoint equal to it. 
+- Using the `output` block, send the traces to the input of the `otelcol.processor.batch` component we will define next. 
+
+`otecol.processor.batch`
+
+- The batch processor will batch spans until a batch size or a timeout is met, before sending those batches on to another component. 
+- Let's configure it to batch minimum 1000 spans, up to 2000 spans, or until 2 seconds have elapsed.
+- Using the `output` block, send the batched traces to the input of the `otelcol.exporter.otlp` component we will define next.
+
+`otelcol.exporter.otlp`
+
+- Using the `client` block, write batches of spans to a local instance of Tempo
+- The Tempo url is http://tempo:4317.
+
+<img width="915" alt="image" src="https://github.com/user-attachments/assets/1e3dedbe-d69b-47b6-b7e0-ee3a2ae740e7" />
+
+Don't forget to [reload the config](#reloading-the-config) after finishing.
+
+#### Verification
+
+Navigate to [Dashboards](http://localhost:3000/dashboards) > `Section 5 Verification` and you should see a dashboard with a populated service graph, table of traces coming from the mythical-requester, and the rate of span ingestion by Tempo
+
+<img width="917" alt="image" src="https://github.com/user-attachments/assets/564236f6-e3b5-430c-a963-2f7509960e5c" />
+
+You can also navigate to [Dashboards](http://localhost:3000/dashboards) > `MLT Dashboard`. These dashboards are configured to use the metrics
+from Spanmetrics, so you should see data for the spans we're ingesting.
+
+<img width="914" alt="image" src="https://github.com/user-attachments/assets/d0822e32-0af2-4f13-b6de-2c037d2e8a93" />
+
+### Section 6: Ingesting application logs
+
+#### Objectives
+
+- Ingest the logs that are being sent by the mythical services to port 3100
+- Add a `service=”mythical”` label to logs
+- Use stage.regex and stage.timestamp to extract the timestamp from the log lines and set the log’s timestamp
+
+<img width="914" alt="image" src="https://github.com/user-attachments/assets/d9c8dbc0-29ed-460b-b487-8440075cec59" />
+<img width="913" alt="image" src="https://github.com/user-attachments/assets/8b8afaa5-ade1-4c5a-9935-6ccb607af0f9" />
+
+#### Instructions
+
+Open `config.alloy` in your editor and copy the following code into it:
+
+```alloy
+//Section 6
+loki.source.api "mythical" {
+     http {
+        listen_address = "0.0.0.0"
+        listen_port    = "3100"
+    }
+    forward_to = [//TODO: Fill this in]
+}
+
+loki.process "mythical" {
+    stage.static_labels {
+        values = {
+           //TODO: Fill this in = "//TODO: Fill this in",        
+        }
+    }
+   stage.regex {
+        expression=`^.*?loggedtime=(?P<loggedtime>\S+)`
+   }
+
+   stage.timestamp {
+        source = "//TODO: Fill this in"
+        format = "2006-01-02T15:04:05.000Z07:00"
+    }
+
+    forward_to = [loki.write.mythical.receiver]
+}
+```
+
+- Ingest application logs sent from the mythical services using the [`loki.source.api`](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.source.api/) component
+- Use the [`loki.process`](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/) component to:
+  - add a static `service="mythical" label
+  - extract the timestamp from the log line using `stage.regex` with this regex: `^.*?loggedtime=(?P<loggedtime>\S+)`
+  - set the timestamp of the log to the extracted timestamp
+  - Forward the processed logs to Loki
+#### Verification
+
+Navigate to Dashboards > `Section 6 Verification` and you should see a dashboard with the rate of logs coming from the mythical apps as well as panels showing the logs themselves for the server and requester
+
+<img width="913" alt="image" src="https://github.com/user-attachments/assets/01b5718b-aa1c-47d6-92a1-206aca81066c" />
+
+### Section 7: Spanlogs
+
+#### Objectives
+
+- Take the traces we're already ingesting and [convert them to logs (spanlogs)](https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.connector.spanlogs/)
+- [Convert](https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.exporter.loki/) the logs to Loki-formatted log entries and forward them to the `loki.processor`. 
+- Use [`loki.process`](https://grafana.com/docs/alloy/latest/reference/components/loki/loki.process/) to convert the format and add attributes to the logs
+- Forward the processed logs to Loki
+
+#### Instructions
+
+Open `config.alloy` in your editor and copy the following code into it:
+
+```alloy
+//Section 7
+otelcol.connector.spanlogs "autologging" {
+    roots = // TODO: Fill this in
+    spans = // TODO: Fill this in
+    processes = // TODO: Fill this in
+
+    span_attributes = ["// TODO: Fill this in", "// TODO: Fill this in", "// TODO: Fill this in"]
+    //these are the span attributes that I would like to include in the logs
+
+    output {
+    logs = [// TODO: Fill this in]
+  }
+}
+
+otelcol.exporter.loki "autologging" {
+    forward_to = [// TODO: Fill this in]
+}
+
+// The Loki processor allows us to accept a Loki-formatted log entry and mutate it into
+// a set of fields for output.
+loki.process "autologging" {
+    stage.json {
+       expressions = {"body" = ""}
+    }
+
+    stage.output {
+       source = "body"
+    }
+
+    stage.logfmt {
+        mapping = {
+            http_method_extracted = "// TODO: Fill this in",
+            http_status_code_extracted = "// TODO: Fill this in", 
+            http_target_extracted = "// TODO: Fill this in", 
+
+        }
+    }
+
+    stage.labels {
+        values = {
+            method = "// TODO: Fill this in", 
+            status = "// TODO: Fill this in",
+            target = "// TODO: Fill this in", 
+        }
+    }
+
+    forward_to = [// TODO: Fill this in]
+}
+```
+**`otelcol.connector.spanlogs`**
+
+For the `otelcol.connector.spanlogs` component to work, we will need to forward the spans from the `otelcol.receiver.otlp`'s output > traces we have defined in section 5 to the `otelcol.connector.spanlogs`'s input.
+
+We'd like to make sure to only generate a log for each full trace(root), not for each span or process (that would be a lot of logs!).
+
+We should also make sure to include the `http.method`,`http.status_code`, `http.target` attributes in the logs.
+
+Then send the generated logs to the `otelcol.exporter.loki`'s input. 
+
+**`otelcol.exporter.loki`** 
+
+This component accepts OTLP-formatted logs from other otelcol components and converts them to Loki-formatted log entries without further configuration. 
+
+Forward the Loki-formatted logs to the `loki.process "autologging"`'s receiver for further processing. 
+
+**`loki.process`**
+
+Use this component to:
+  - Convert the body from JSON to logfmt using the `stage.json` and `stage.logfmt` stages
+  - Add the `method`, `status`, and `target` labels from the `http.method`, `http.status_code`, and `http.target` attributes
+
+<img width="917" alt="image" src="https://github.com/user-attachments/assets/10aaff15-6561-4c6a-b21b-9d1f2a2d5be5" />
+
+Don't forget to [reload the config](#reloading-the-config) after finishing.
+
+#### Verification
+
+Navigate to Dashboards > `Section 7 Verification` and you should see a dashboard with panels containing the rate of spanlog ingestion as well as the spanlogs themselves.
+
+<img width="910" alt="image" src="https://github.com/user-attachments/assets/07cea252-4ba4-489b-957f-eaaeccb07418" />
+
+<img width="911" alt="image" src="https://github.com/user-attachments/assets/fa6b332e-9f32-4844-8213-263f68427ba3" />
+
+
+### Mission 1
+
+#### Description
+
+One of our trusted informants has stashed an encrypted file—`secret_message.txt.enc`—on a remote dead-drop.
+
+The decryption key? Hidden in plain sight, embedded in an internal label on the service discovery targets.
+Since internal labels are stripped before metrics make it to Mimir, this covert tactic kept the key out of enemy hands.
+
+Your mission: use Alloy to uncover the hidden key, decrypt the message, and reveal the intel within.
+
+#### Objectives
+
+- Use the Alloy UI to find the key hidden in the internal label on the service discovery targets
+- Decode the key and decrypt the secret message
+
+#### Instructions
+
+Access the [Alloy UI](http://localhost:12347) and look for the hidden key on one of the service discovery targets.
+
+To decrypt and print the AES-256-CBC encrypted secret message, run the following command in the terminal at the root of the lab repo directory, using the key you just found:
+`openssl enc -aes-256-cbc -d -salt -pbkdf2 -in secret_message.txt.enc -k '<key>'`
+
+#### Verification
+
+You should see the secret message in the console!
+
+### Mission 2
+
+#### Description
+
+A rogue actor has tampered with IMF's monitoring systems, slipping a high-cardinality instance_id label into a metric that counts database calls.
+
+This unexpected spike in cardinality is putting Mimir under serious pressure -- and it's up to us to defuse the situation before it blows.
+
+You can see the dashboard that informed the IMF that this was happening by navigating to [Dashboards](http://localhost:3000/dashboards) > `Mission 2`.
+
+But it's not all bad news. Hidden within the instance_id is valuable intel: the name of the cloud provider.
+IMF wants us to extract that information and promote it to a dedicated cloud_provider label—transforming this mess into a mission success.
+
+IMF has equipped you with the following regex to help you complete this mission:
+`^(aws|gcp|azure)-.+`
+
+#### Objectives
+
+- Using `prometheus.relabel`, use the provided regex to replace the `cloud_provider` label with the extracted value from the `instance_id` label.
+- Drop the `instance_id` label.
+
+#### Instructions
+
+For this exercise, you may find the following components useful:
+
+- [prometheus.relabel](https://grafana.com/docs/alloy/latest/reference/components/prometheus/prometheus.relabel/)
+
+Go back to the portion of config from Section 4, where we started scraping metrics from the mythical services. Paste the following in above the `prometheus.write.queue` component (**note**: the order of components does not matter, this is just for organization and readability):
+
+```alloy
+prometheus.relabel "mission_2" {
+    forward_to = [prometheus.write.queue.experimental.receiver]
+
+  //write a relabel rule to extract the cloud provider from the instance_id label and add it as a new label called cloud_provider
+    rule {
+        action        = "// TODO: Fill this in"
+        target_label  = "// TODO: Fill this in"
+        source_labels = ["// TODO: Fill this in"]
+        regex         = "^(aws|gcp|azure)-.+"
+        replacement   = "$1"
+    }
+
+    // drop the instance_id label from metrics
+    rule {
+        action  = "// TODO: Fill this in"
+        regex   = "// TODO: Fill this in"
+    }
+}
+```
+
+#### Verification
+
+Navigate to the [Explore](http://localhost:3000/explore) page and look at the metrics.
+Query for `count by (cloud_provider) (rate(mythical_db_request_count_total [$__rate_interval]))` and you should see a non-zero value.
+
+<img width="909" alt="image" src="https://github.com/user-attachments/assets/7a2fc73e-03ea-4e5c-be12-e4053027172c" />
+
+### Mission 3
+
+After much debate, the various departments within IMF have reached a rare consensus: it's time to standardize the attribute name for service tiers.
+Until now, teams have been using conflicting keys like `servicetier` and `tier`, creating chaos in spanmetrics and cross-department dashboards.
+
+Headquarters has spoken: `service.tier` is the new standard.
+
+Your mission: use Alloy to bring order to the data.
+Standardize the attribute across the board so that spanmetrics flow smoothly and dashboards speak a common language.
+
+#### Objectives
+
+- Use the [`otelcol.processor.attributes`](https://grafana.com/docs/agent/latest/flow/reference/components/otelcol.processor.attributes/) component to set the `service.tier` attribute to the value of
+  the `servicetier` or `tier` attributes.
+- Drop the `servicetier` and `tier` attributes.
+
+#### Instructions
+
+The [`otelcol.processor.attributes`](https://grafana.com/docs/alloy/latest/reference/components/otelcol/otelcol.processor.attributes/) component allows you to add, set, or drop attributes.
+
+Go back to the portion of config from Section 5, where we received traces from the mythical services. Paste the following  above the `otelcol.processor.batch.default` component (**note**: the order of components does not matter, this is just for organization and readability):
+
+```alloy
+otelcol.processor.attributes "mission_3" {
+    // These two actions are used to add the service.tier attribute to spans from
+    // either the servicetier or tier attributes.
+    action {
+        action         = "//TODO: Fill this in"
+        key            = "//TODO: Fill this in"
+        from_attribute = "//TODO: Fill this in"
+    }
+    action {
+        action         = "//TODO: Fill this in"
+        key            = "//TODO: Fill this in"
+        from_attribute = "//TODO: Fill this in"
+    }
+
+    // This isn't required, but shows how to exclude the attributes we just copied.
+    exclude {
+        match_type = "strict"
+
+        attribute {
+            key = "//TODO: Fill this in"
+        }
+
+        attribute {
+            key = "//TODO: Fill this in"
+        }
+    }
+
+    output {
+        traces = [otelcol.processor.batch.default.input]
+    }
+}
+```
+
+#### Verification
+
+Navigate to [Dashboards](http://localhost:3000/dashboards) > `Mission 3` and you should see a dashboard with data including the new `service_tier` label, which came from spanmetrics generation using the `service.tier` attribute we just consolidated.
+
+<img width="909" alt="image" src="https://github.com/user-attachments/assets/db5b980b-83b1-4c92-9d19-b33e50a52530" />
+
+
+### Mission 4
+
+#### Description
+
+The IMF needs your expertise for one final mission.
+An opposing state actor exploited a Zero-Day vulnerability in one of our servers, causing sensitive tokens to be logged by the mythical-requester.
+
+The security team is standing by, but before they can act, we need to make sure no tokens are being written to Loki.
+Your task: use Alloy to identify and redact any sensitive tokens from the mythical-service logs—effectively, clean up the trail and keep things secure.
+
+Navigate to [Dashboards](http://localhost:3000/dashboards) > `Mission 4`. You will see logs coming in with sensitive token information. 
+
+#### Objectives
+
+- Redact any tokens found in the logs from the mythical services
+
+#### Instructions
+
+Take a look at the [`loki` components](https://grafana.com/docs/alloy/latest/reference/components/loki/). Are there any that seem like they could be useful for this mission?
+
+Which section would you add this component to and how would you have to change the previous configuration? 
+
+#### Verification
+
+Navigate to [Dashboards](http://localhost:3000/dashboards) > `Mission 4` and you should see a dashboard with a
+panel showing the rate of logs with tokens coming from the mythical services as well as the logs themselves with the secret token redacted. 
+
+<img width="913" alt="image" src="https://github.com/user-attachments/assets/02151116-d8c5-4aa1-844a-6c6d9a32285a" />
+
+<img width="912" alt="image" src="https://github.com/user-attachments/assets/4f066278-ba62-4a0e-b905-75d1c4f25a34" />
+<img width="912" alt="image" src="https://github.com/user-attachments/assets/ae9e8f4a-9fcc-435d-bbf6-7b482b01c87a" />
+<img width="915" alt="image" src="https://github.com/user-attachments/assets/ed565c8c-31e8-47f6-bc20-893e73b70eb6" />
+<img width="913" alt="image" src="https://github.com/user-attachments/assets/15e5a2cb-0e8f-46f0-b93e-4e32e27b992d" />
+
+
+# Q & A
+
